@@ -86,13 +86,7 @@ app.post('/chat', async (req, res) => {
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: messages,
-      mcp_servers: [
-        {
-          type: 'url',
-          url: 'https://drivemcp.googleapis.com/mcp/v1',
-          name: 'google-drive'
-        }
-      ]
+   
     });
 
     const reply = response.content
