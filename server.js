@@ -169,6 +169,7 @@ const TOPICS = {
   warrant: ['warrant','search warrant','arrest warrant','no knock'],
   felony: ['felony','felony charge','felonious','f1','f2','f3','f4','f5','bindover','grand jury'],
   misdemeanor: ['misdemeanor','misd','m1','m2','m3','m4','citation','charge'],
+  juvenile: ['juvenile','minor','youth','jdc','juvenile court','delinquency'],
   'criminal charges': ['criminal charge','charges','charging','complaint','affidavit','probable cause affidavit'],
   theft: ['theft','steal','shoplifting','robbery','burglary'],
   assault: ['assault','battery','menacing','threatening','stalking'],
@@ -191,6 +192,7 @@ const TOPICS = {
   union: ['union','opba','spd union','labor'],
   contracts: ['contract','collective bargaining','cba','agreement'],
   'amended ordinance': ['amended ordinance','ordinance change','ordinance update'],
+  'lateral transfer': ['lateral transfer','lateral','moa','memorandum of agreement','pay placement','wage scale placement','notice of vote'],
 };
 
 const findFiles = async (question) => {
@@ -231,6 +233,12 @@ const findFiles = async (question) => {
           if (name.includes(city)) { score = Math.max(0, score - 8); }
         }
       }
+
+      const isLegalDoc = /moa|memorandum|notice of vote|agreement/i.test(f.name);
+      const isRecruitmentFlyer = /flyer|now hiring|recruit|career fair|join our/i.test(f.name);
+      const wantsRecruitmentInfo = /flyer|recruit|hiring|career fair|benefits overview/i.test(q);
+      if (isLegalDoc && !wantsRecruitmentInfo) score += 6;
+      if (isRecruitmentFlyer && !wantsRecruitmentInfo) score = Math.max(0, score - 6);
 
       return { ...f, score };
     });
@@ -453,7 +461,7 @@ When answering questions:
 3. Cite General Orders as [G2311-63 Use of Force Policy]
 4. Cite Ohio law as [ORC 2935.03]
 5. Cite CBA as [CBA Article 8 - Discipline]
-6. Cite Solon ordinances as [Solon Ord. 434.01]
+6. Cite Solon ordinances as [Solon Ord. 434.01]. ALWAYS include the ordinance code library link when answering an ordinance question: 🔗 **View Ordinances:** https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1
 7. Be direct and practical — officers need quick answers
 8. If Drive content is a scanned PDF (unreadable), say so and direct officer to the clickable link
 9. Always end with document links as clickable buttons
