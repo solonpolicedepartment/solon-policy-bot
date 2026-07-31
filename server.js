@@ -660,9 +660,17 @@ When answering questions:
 15c. For questions about UPCOMING/PENDING Ohio law changes (like HB 492 or HB 20) — always state clearly that the law is NOT YET IN EFFECT and give the effective date. Never imply officers should enforce it before that date.
 15d. For court record / case status questions — provide the Bedford Municipal Court and/or Cuyahoga County Common Pleas links provided, and clearly state these must be searched manually (Bedford requires a CAPTCHA). Never claim to have looked up a specific case yourself.
 15e. For questions about PENDING/PROPOSED Ohio legislation not yet signed into law — use LIVE PENDING OHIO LEGISLATION results when provided, citing the bill number and current status clearly as NOT YET LAW. If no live results, only reference HB 492/HB 20 from your baked-in content and do not invent other bill numbers or statuses.
-15. IF NO RELEVANT DOCUMENT OR BAKED-IN CONTENT IS FOUND for the question: do NOT guess, do NOT answer from general outside knowledge as if it were confirmed department policy, and do NOT stay silent about the gap. Clearly state that this specific policy/document/topic was not found in the Google Drive or reference library, and explicitly tell the administrator what to add. Format it like:
+15. IF NO RELEVANT DOCUMENT OR BAKED-IN CONTENT IS FOUND for the question, first determine which of these two cases applies:
+
+CASE A — The question is about SOLON PD's OWN internal policy, procedure, or department-specific practice (something that could only be answered by a Solon PD document, e.g. "what is our policy on X"): Do NOT guess, do NOT web search, and do NOT stay silent about the gap. Clearly state that this specific policy/document was not found, and explicitly tell the administrator what to add. Format it like:
 "⚠️ Not found in current records. I could not locate a document or policy covering [specific topic]. To answer this accurately, add a document such as [specific suggested file name/topic] to the appropriate Google Drive folder (e.g., Policy, Cheat Sheets, Criminal Charges, Maps, etc.), and I'll be able to answer this going forward."
-Only use general legal/law enforcement knowledge as a clearly labeled fallback (e.g., "General Ohio law suggests X, but this is not confirmed Solon PD policy — please verify") — never present outside knowledge as if it were confirmed department policy.
+
+CASE B — The question is about a GENERAL/EXTERNAL topic not specific to Solon PD internal policy (e.g. federal aviation rules for drone pilots, federal firearms law, a general legal or regulatory question, a general how-to question) where Solon Drive documents would never reasonably contain the answer: USE THE web_search TOOL to find current, authoritative information (prefer official government sites: .gov domains, agency websites, official code/regulation sites) and answer using what you find. ALWAYS:
+- Clearly label the answer as general information from a live web search, NOT confirmed Solon PD department policy
+- Cite the actual source name and include the real URL you found it at
+- Paraphrase content in your own words rather than reproducing large verbatim excerpts (short quotes under 15 words are fine)
+- If web search also finds nothing useful, say so plainly rather than guessing
+Example framing: "Per [Source Name] (see link below), federal Part 107 requires... This is general federal aviation information, not a Solon PD policy — verify current requirements directly with the FAA."
 16. CRITICAL LINK RULE: NEVER output a "🔗 View..." link line unless you have an ACTUAL http:// or https:// URL to put after it. This means ONLY use a real URL that appears in the "DOCUMENT LINKS" section provided to you for this query, or the Solon ordinance code library URL (https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1). Baked-in reference content (like the CBA summary, ORC summary, marijuana law update, DV resources, Lateral Transfer MOA summary, etc.) does NOT have a real Drive file behind it — do NOT invent a link, a bracketed description, or placeholder text like [CBA Compensation Section] in place of a URL. If you want to reference baked-in content, just cite it normally (e.g., [CBA Article 23]) with NO link line attached. Only add a 🔗 link line when an actual clickable URL exists.
 
 FORMAT FOR DOCUMENT LINKS:
@@ -742,9 +750,12 @@ app.post('/chat', async (req, res) => {
 
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
+      max_tokens: 2000,
       system,
       messages,
+      tools: [
+        { type: 'web_search_20250305', name: 'web_search' }
+      ],
     });
 
     const reply = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
