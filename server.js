@@ -58,6 +58,7 @@ const TOPICS = {
   overtime: ['overtime','duty time','time off','shift','kelly','lunch','break'],
   sick: ['duty time','time off','sick','leave'],
   vacation: ['duty time','time off','vacation','leave'],
+  holiday: ['holiday','paid holiday','kelly day'],
   hiring: ['hiring','hire','employment','background','recruit'],
   record: ['record','document','public records','retention'],
   ohleg: ['ohleg','leads','ncic'],
@@ -83,6 +84,15 @@ const TOPICS = {
   report: ['report','incident report','documentation','nibrs','rra'],
   tow: ['tow','impound','vehicle storage'],
   accident: ['accident','crash','collision'],
+  cba: ['cba','contract','collective bargaining','opba','union','grievance','arbitration'],
+  discipline: ['discipline','disciplinary','discharge','suspension','termination','just cause'],
+  grievance: ['grievance','arbitration','opba','union'],
+  pay: ['pay','salary','wage','compensation','longevity','rate'],
+  insurance: ['insurance','health','medical','cobra','deductible'],
+  tuition: ['tuition','reimbursement','education','school'],
+  layoff: ['layoff','laid off','recall','seniority'],
+  probationary: ['probationary','probation','new employee','new hire'],
+  'drug testing': ['drug test','alcohol test','random test','reasonable suspicion'],
 };
 
 const findFiles = async (question) => {
@@ -123,23 +133,126 @@ const readFile = async (fileId, mimeType) => {
   }
 };
 
+const BAKED_CONTENT = `
+=== SOLON CITY ORDINANCES (2026 S-12 Supplement) ===
+Full code: https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1
+
+SPEED LIMITS [Solon Ord. 434.03]: 25 mph school zones; 25 mph business/residence districts; 35 mph suburban residential; 55 mph rural/state routes. Must maintain assured clear distance ahead at all times.
+OVI [Solon Ord. 434.01]: BAC >= 0.08% but < 0.17% = OVI (M1 minimum). BAC >= 0.17% = high test OVI with enhanced penalties. 1st offense = 3 days to 6 months jail; mandatory license suspension. 2nd offense within 10 years: 10 days to 6 months. 3rd offense: 30 days mandatory. 4th+ = felony.
+RECKLESS OPERATION [Solon Ord. 434.02]: Willful/wanton disregard for safety. 1st offense M4; 2nd offense M3.
+STREET RACING [Solon Ord. 434.07]: Participating, spectating, aiding = M1. Repeat = felony.
+ACCIDENTS [Solon Ord. 436.11]: Driver must stop, give info, render aid. Failure to stop = M1 (injury) or felony (death). Must report accidents with injury/death or damage >$1,000.
+DRIVING UNDER SUSPENSION [Solon Ord. 436.071]: M1; mandatory additional suspension.
+TEXTING/HANDHELD [Solon Ord. 432.42]: No texting or handheld device use while driving.
+SEAT BELTS [Solon Ord. 432.44]: Required all front-seat occupants. Children under 8 = child restraint. Minor misdemeanor, no points.
+MOVE OVER LAW [Solon Ord. 432.40]: Must change lanes or slow for stationary emergency vehicles with lights on.
+OVERNIGHT PARKING [Solon Ord. 452.14]: No parking on public streets 2:00 AM - 6:00 AM without permit.
+OFFENSE CLASSIFICATIONS [Solon Ord. 606.03]: M1=180 days/$1,000; M2=90 days/$750; M3=60 days/$500; M4=30 days/$250; Minor Misd=fine only up to $150.
+OBSTRUCTING OFFICIAL BUSINESS [Solon Ord. 606.14]: M2. If creates risk of physical harm = F5.
+RESISTING ARREST [Solon Ord. 606.16]: M2.
+FAILURE TO COMPLY/FLEEING [Solon Ord. 606.165]: Failure to comply with traffic order = M1. Willfully fleeing police in motor vehicle = felony (F4 no substantial risk; F3 substantial risk).
+ALCOHOL - OPEN CONTAINER IN VEHICLE [Solon Ord. 612.04]: Minor misdemeanor.
+ALCOHOL - UNDERAGE POSSESSION [Solon Ord. 612.09]: Minor misdemeanor 1st offense; M4 subsequent.
+CANNABIS - ADULT POSSESSION [Solon Ord. 624.02]: Adults 21+ may possess up to 2.5 oz. No public consumption. No use while driving.
+DOGS ON LEASH [Solon Ord. 618.16]: Dogs must be on leash when off owner's property. Minor misdemeanor.
+NO FEEDING DEER [Solon Ord. 618.127]: Minor misdemeanor.
+
+=== OHIO REVISED CODE REFERENCE ===
+OFFENSE CLASSIFICATIONS [ORC 2901.02]: F1-F5 felonies; M1(180 days/$1,000) through M4(30 days/$250); Minor Misdemeanor (fine only up to $150).
+MENTAL STATES [ORC 2901.22]: Purposely=specific intent; Knowingly=aware conduct will probably cause result; Recklessly=conscious disregard of substantial risk; Negligently=failure to perceive risk.
+SELF-DEFENSE/NO DUTY TO RETREAT [ORC 2901.05/2901.09]: Prosecution must prove BEYOND REASONABLE DOUBT defendant did NOT act in self-defense. No duty to retreat if in a place lawfully allowed to be. Castle doctrine presumption applies when force used against unlawful entry into residence or vehicle.
+AGGRAVATED MURDER [ORC 2903.01]: Death or life imprisonment. Purposely with prior calculation and design; or during certain felonies; or victim under 13; or victim is LEO the offender knows is LEO engaged in duties.
+MURDER [ORC 2903.02]: 15 years to life. Purposely cause death; or cause death as proximate result of committing F1/F2 offense of violence.
+FELONIOUS ASSAULT [ORC 2903.11]: F2 (F1 if victim is peace officer). Knowingly cause serious physical harm; or cause/attempt physical harm by deadly weapon.
+ASSAULT [ORC 2903.13]: Generally M1. Against peace officer/firefighter/EMS in performance of duties = F4 (mandatory minimum 12 months if serious physical harm to peace officer).
+STRANGULATION [ORC 2903.18]: Impeding breathing/circulation by pressure to throat/neck or covering nose/mouth. Cause serious physical harm = F2; Substantial risk of serious physical harm = F3; Physical harm to family/household member = F4.
+OBSTRUCTING OFFICIAL BUSINESS [ORC 2921.31]: M2 generally; F5 if creates risk of physical harm.
+RESISTING ARREST [ORC 2921.33]: (A) Recklessly resist lawful arrest = M2; (B) + causes physical harm to LEO = M1; (C) + deadly weapon or brandishes weapon = F4.
+WARRANTLESS ARREST AUTHORITY [ORC 2935.03]: General authority to arrest persons found violating law within jurisdiction. Extended authority for: offenses of violence, DV, protection order violations, menacing by stalking, aggravated trespass, theft offenses, felony drug offenses. PREFERRED COURSE OF ACTION for DV = arrest. Officer choosing NOT to arrest must document clear reasons. Cell space cannot be considered. No victim consent required.
+HOT PURSUIT [ORC 2935.03(D)]: May pursue outside jurisdiction if: pursuit begins without unreasonable delay; initiated within jurisdiction; offense is felony, M1, M2, or point-chargeable offense.
+DOMESTIC VIOLENCE [ORC 2919.25]: (A) Knowingly cause/attempt physical harm to family/household member; (B) Recklessly cause SERIOUS physical harm; (C) Threat of force causing belief of imminent harm. Generally M1 for physical harm; prior conviction = F4; 2+ prior = F3. Victim pregnant adds mandatory prison.
+VIOLATING PROTECTION ORDER [ORC 2919.27]: Recklessly violate terms of any protection order. Generally M1; F5 if prior violation; F3 if violating while committing a felony.
+DV WRITTEN REPORT REQUIREMENTS [ORC 2935.032]: Must complete DV report whether or not arrest made. Advise victim of TPO availability. Give victim: officer name, badge number, report number, case info number, local DV shelter number, victim advocate info. If no arrest when preferred = document clear reasons.
+SEARCH WARRANT PROBABLE CAUSE [ORC 2933.22]: Warrant requires probable cause, supported by oath, particularly describing place and items.
+NO-KNOCK WARRANT [ORC 2933.231]: Requires showing officers will face risk of serious physical harm if required to knock/announce. Address must be verified correct. State liable for damages if executed at wrong address.
+DEADLY WEAPON [ORC 2923.11]: Any instrument capable of inflicting death, designed/adapted/used as weapon. FIREARM includes unloaded and inoperable firearms that can readily be rendered operable.
+
+=== SOLON PD COLLECTIVE BARGAINING AGREEMENT (CBA) ===
+City of Solon & OPBA — Patrol Officers | Term: January 1, 2025 - December 31, 2027
+
+PROBATIONARY PERIOD [CBA Art. 3]: 12 months after completing Field Training Program + police academy. During probation: may be discharged WITHOUT CAUSE. No grievance or Civil Service rights during probation.
+DISCIPLINE [CBA Art. 8]: Only for JUST CAUSE for non-probationary employees. Written notice required before suspension/discharge. Employee has 5 calendar days to respond in writing. Disciplinary action may be appealed through grievance procedure.
+EMPLOYEE RIGHTS [CBA Art. 6]: Copy of any departmental charge provided simultaneously with transmission to Chief. Polygraph only with employee CONSENT. Civilian complaints must be in writing and signed. Written reprimands over 2 years old NOT used for progressive discipline. Suspensions over 4 years old NOT used to support current action. Anonymous complaints kept in SEPARATE file.
+GRIEVANCE PROCEDURE [CBA Art. 10]: Step 1 = notify supervisor within 5 days; Step 2 = written to Chief within 5 days of Step 1; Step 3 = appeal to Mayor within 7 days of Step 2 decision. Time limits strictly adhered to — missing deadline = grievance waived.
+ARBITRATION [CBA Art. 11]: Must file within 10 days of Step 3 decision. Arbitrator selected by mutual agreement or AAA. Decision is FINAL AND BINDING. Losing party pays arbitrator fees.
+DUTY HOURS [CBA Art. 15]: 12-hour shifts = 84 hours per 2-week pay period. Kelly Day = one 12-hour day off every 42 days. 90 days notice required before changing from 12-hour shift schedule.
+OVERTIME [CBA Art. 16]: 12-hour shift = 1.5x for work over 84 hours/pay period, over 12 hours/day, or on Kelly Day. On-call/court time minimum 4 hours at 1.5x rate. Departmental meetings minimum 3 hours at 1.5x rate. Christmas, Thanksgiving, Memorial Day, July 4th fireworks = 2.25x rate.
+COMP TIME [CBA Art. 16-A]: Accrues at 1.5 hours per overtime hour. Max carryover = 112 hours. Between Jan 1-Nov 30 may accumulate up to 240 hours. Hours over 112 as of Nov 30 paid out in December.
+HOLIDAYS [CBA Art. 17]: 14 paid holidays = 144 hours total. Includes Police Memorial Day (May 15). If worked: 2x straight time OR another day off. If denied: straight-time pay in last pay period.
+VACATION ACCRUAL [CBA Art. 18]: 1yr=84hrs; 5yr=120hrs; 10yr=168hrs; 15yr=204hrs; 20yr=216hrs; 25yr=240hrs.
+SICK LEAVE [CBA Art. 19]: Accrues at 4.6 hours per 80 hours worked; max 159 hours/year; unlimited accumulation. Must notify OIC via dispatch at least 1 hour before shift. After 3 consecutive days Chief may require physician documentation.
+FUNERAL LEAVE [CBA Art. 20]: Up to 3 days for immediate family; 1 day for other family members. NOT deducted from sick leave.
+INJURY LEAVE [CBA Art. 21]: 12-hour shift = up to 120 days paid at regular compensation for service-related disability. Must file Workers' Comp and assign temporary disability benefits to City.
+JURY DUTY [CBA Art. 22]: 12-hour shift officers: jury duty day is work day if normally scheduled; day off if regular day off (no City pay).
+PAY RATES 2025 [CBA Art. 23]: Academy=$20.80/hr; Start=$40.5653/hr ($84,375/yr); 1yr=$42.0462/hr ($87,456/yr); 2yr=$44.7677/hr ($93,116/yr); 3yr=$46.1743/hr ($96,042/yr); 4yr=$48.2293/hr ($100,316/yr). 4% increase 2025; 3% increase 2026 and 2027.
+LONGEVITY [CBA Art. 24]: Hired on/after Jan 1, 1989 = 0.25% of base salary per full year of service (max 5%). Begins after 5 full years of service.
+OIC PAY [CBA Art. 25]: 1.5x Sergeant's rate per hour when assigned as Officer in Charge.
+FTO PAY [CBA Art. 25]: 2 hours paid overtime per shift as Field Training Officer.
+UNIFORM ALLOWANCE [CBA Art. 26]: $1,500 annual allowance for non-probationary employees, paid by March 1. Detectives: additional $50/month.
+HEALTH INSURANCE [CBA Art. 28]: Employee contribution: 2025=8% of COBRA; 2026=9%; 2027=10%. Life insurance: $25,000 term. Opt-out: 15% of yearly COBRA equivalent in 4 quarterly payments.
+DRUG TESTING [CBA Art. 29]: Post-accident testing when 2 of 5 conditions exist. Random testing at 10% annually. Reasonable suspicion testing. First positive = EAP; decline EAP = immediate discipline. Medical marijuana NOT a defense — any positive above threshold = violation.
+TUITION REIMBURSEMENT [CBA Art. 35]: Up to $5,250/year. Must earn C or above. Must repay if voluntarily leave within 3 years of last reimbursement.
+
+=== CHARGE REFERENCE — CHEAT SHEETS ===
+OVI: ORC 4511.19(A)(1)(a) — BAC .08-.17: ORC 4511.19(A)(1)(d) — BAC .17+: ORC 4511.19(A)(1)(h)
+SPEED: Solon Ord. 434.03 / ORC 4511.21
+RECKLESS OPERATION: Solon Ord. 434.02 / ORC 4511.20
+TEXTING: Solon Ord. 432.43(a) / ORC 4511.204(A)
+FAILURE TO COMPLY/FLEEING: Solon Ord. 606.165 / ORC 2921.331
+HIT/SKIP: Solon Ord. 436.11(a)(1) / ORC 4549.02(A)(1)
+DRIVING UNDER SUSPENSION: ORC 4510.11(A) — OVI Suspension: ORC 4510.14(A)
+NO VALID LICENSE: Solon Ord. 436.072(a)(1) / ORC 4510.12(A)(1)
+OPEN CONTAINER: Solon Ord. 612.04 / ORC 4301.62
+UNDERAGE ALCOHOL: Solon Ord. 612.09 / ORC 4301.69(E)(1)
+MARIJUANA POSSESSION: Solon Ord. 624.03 / ORC 2925.11
+DRUG PARAPHERNALIA: Solon Ord. 624.14 / ORC 2925.141
+DISORDERLY CONDUCT: Solon Ord. 648.04 / ORC 2917.11
+OBSTRUCTING OFFICIAL BUSINESS: Solon Ord. 606.14 / ORC 2921.31
+RESISTING ARREST: Solon Ord. 606.16 / ORC 2921.33
+DOMESTIC VIOLENCE: ORC 2919.25
+VIOLATING PROTECTION ORDER: ORC 2919.27
+FELONIOUS ASSAULT: ORC 2903.11
+ASSAULT ON PEACE OFFICER: ORC 2903.13
+STRANGULATION: ORC 2903.18
+AGGRAVATED ROBBERY: ORC 2911.01
+MOVE OVER: Solon Ord. 432.40 / ORC 4511.213
+SEAT BELT DRIVER: Solon Ord. 438.29(b)(1) / ORC 4513.263(B)(1)
+CHILD RESTRAINT: Solon Ord. 438.28(a) / ORC 4511.81
+FOLLOWING TOO CLOSELY: Solon Ord. 432.09(a)(1) / ORC 4511.34(A)
+IMPROPER TURN: Solon Ord. 432.10 / ORC 4511.36
+LEFT OF CENTER: Solon Ord. 432.05(a) / ORC 4511.29(A)
+SCHOOL BUS: Solon Ord. 432.36 / ORC 4511.75
+STREET RACING: Solon Ord. 434.07(b) / ORC 4511.251(B)`;
+
 const SYSTEM = `You are the Solon PD Assistant — a comprehensive reference tool for officers, supervisors, and staff of the Solon Police Department. You provide accurate, practical, cited answers on:
 
-1. SOLON PD GENERAL ORDERS & POLICIES — All department SOPs and procedures. Cite as [G2311-63 Use of Force Policy]
-2. OHIO REVISED CODE — State criminal, traffic, and civil statutes. Cite as [ORC 2935.03] or [ORC 4511.19]
-3. SOLON CITY ORDINANCES — Full code at https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1. Key parts: Part Four (Traffic), Part Six (General Offenses). Cite as [Solon Ord. 333.01]. Always include the link when answering ordinance questions.
-4. CONSTITUTIONAL & CASE LAW — 4th, 5th, 14th Amendment, Miranda v. Arizona, Graham v. Connor, Tennessee v. Garner, Terry v. Ohio, etc.
-5. LAW ENFORCEMENT PROCEDURES — Arrests, searches, traffic stops, OVI, domestic violence, juveniles, mental health crisis response, report writing, NIBRS
-6. COMMUNITY RESOURCES — Mental health, victim services, local contacts
+1. SOLON PD GENERAL ORDERS & POLICIES — All department SOPs pulled live from Google Drive. Cite as [G2311-63 Use of Force Policy]
+2. OHIO REVISED CODE — State statutes. Cite as [ORC 2935.03]
+3. SOLON CITY ORDINANCES — Full code at https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1. Cite as [Solon Ord. 434.01]
+4. COLLECTIVE BARGAINING AGREEMENT (CBA/CONTRACT) — OPBA contract January 2025-December 2027. Cite as [CBA Article 8 - Discipline]
+5. CONSTITUTIONAL & CASE LAW — Miranda v. Arizona, Graham v. Connor, Tennessee v. Garner, Terry v. Ohio, etc.
+6. LAW ENFORCEMENT PROCEDURES — Arrests, searches, traffic stops, OVI, domestic violence, juveniles, mental health crisis, NIBRS
 
 RULES:
-- Prioritize content from Google Drive documents when provided
-- Always cite your source — GO number, ORC section, case name, or ordinance number
-- Be direct and practical — officers need quick, usable answers
-- If Drive content doesn't fully answer the question, answer from your training knowledge with citations
-- Flag anything that may have changed recently and recommend verification
+- Prioritize content from Google Drive documents when provided — include clickable links
+- Always cite your source with specific article, section, or GO number
+- Be direct and practical — officers need quick usable answers
+- When Drive content is provided, ALWAYS include the document link as a clickable button
 - For ordinance questions always include: https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1
-- End with: **Source:** [citation] and 🔗 **View Document:** [URL] when a Drive file is relevant`;
+- End responses with: **Source:** [citation] and 🔗 **View Document:** [URL]
+- If multiple documents are relevant, list ALL links
+
+${BAKED_CONTENT}`;
 
 app.get('/', (req, res) => res.json({ status: 'Solon PD Assistant running' }));
 
@@ -155,16 +268,14 @@ app.post('/chat', async (req, res) => {
     for (const f of files) {
       const content = await readFile(f.id, f.mimeType);
       if (content && content.length > 100) {
-        context += `\n\n=== ${f.name} ===\n${content.slice(0, 5000)}`;
-        links.push(`${f.name}: ${f.webViewLink}`);
-      } else {
-        links.push(`${f.name}: ${f.webViewLink}`);
+        context += `\n\n=== ${f.name} ===\nDrive Link: ${f.webViewLink}\n${content.slice(0, 5000)}`;
       }
+      links.push(`📄 ${f.name}: ${f.webViewLink}`);
     }
 
     const system = SYSTEM +
-      (context ? `\n\n=== SOLON PD DOCUMENTS FROM GOOGLE DRIVE ===\n${context}` : '') +
-      (links.length ? `\n\n=== DOCUMENT LINKS ===\n${links.join('\n')}` : '');
+      (context ? `\n\n=== LIVE CONTENT FROM GOOGLE DRIVE ===\n${context}` : '') +
+      (links.length ? `\n\n=== RELEVANT DOCUMENT LINKS (always include these as clickable links in your response) ===\n${links.join('\n')}` : '');
 
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
