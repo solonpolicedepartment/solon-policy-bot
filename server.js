@@ -17,17 +17,15 @@ const getAuth = () => {
   });
 };
 
-// Cache all files including subfolders
 let fileCache = null;
 let cacheTime = 0;
-const TTL = 3 * 60 * 1000; // 3 minutes
+const TTL = 2 * 60 * 1000;
 
 const getAllFiles = async () => {
   if (fileCache && Date.now() - cacheTime < TTL) return fileCache;
   const drive = google.drive({ version: 'v3', auth: getAuth() });
   let files = [], pageToken = null;
 
-  // Search ALL files across ALL folders and subfolders
   do {
     const r = await drive.files.list({
       q: `trashed=false and (
@@ -37,7 +35,9 @@ const getAllFiles = async () => {
         mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or
         mimeType='application/vnd.google-apps.spreadsheet' or
         mimeType='text/plain' or
-        mimeType='application/msword'
+        mimeType='application/msword' or
+        mimeType='image/jpeg' or
+        mimeType='image/png'
       )`,
       fields: 'nextPageToken, files(id, name, webViewLink, mimeType, parents, description)',
       pageSize: 100,
@@ -55,24 +55,20 @@ const getAllFiles = async () => {
   return files;
 };
 
-// Read file content with better extraction
 const readFile = async (fileId, mimeType) => {
   try {
     const drive = google.drive({ version: 'v3', auth: getAuth() });
 
-    // Google Docs - export as plain text (best quality)
     if (mimeType === 'application/vnd.google-apps.document') {
       const r = await drive.files.export({ fileId, mimeType: 'text/plain' });
       return String(r.data).slice(0, 8000);
     }
 
-    // Google Sheets - export as CSV
     if (mimeType === 'application/vnd.google-apps.spreadsheet') {
       const r = await drive.files.export({ fileId, mimeType: 'text/csv' });
       return String(r.data).slice(0, 8000);
     }
 
-    // Word docs - export as plain text
     if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
         mimeType === 'application/msword') {
       try {
@@ -85,27 +81,24 @@ const readFile = async (fileId, mimeType) => {
       }
     }
 
-    // PDFs and other files - download and extract text
     const r = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
     const text = Buffer.from(r.data).toString('utf8', 0, 10000)
       .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
       .replace(/\s{3,}/g, '\n')
       .trim();
 
-    // Check if we got readable text (not binary garbage)
     const readableChars = (text.match(/[a-zA-Z\s]/g) || []).length;
     const totalChars = text.length;
-    if (totalChars > 0 && readableChars / totalChars > 0.5) {
+    if (totalChars > 0 && readableChars / totalChars > 0.4) {
       return text.slice(0, 8000);
     }
-    return null; // Scanned PDF - return null
+    return null;
   } catch (e) {
     console.error('Read error:', e.message);
     return null;
   }
 };
 
-// Comprehensive topic mapping
 const TOPICS = {
   pursuit: ['pursuit','vehicle','chase','fleeing'],
   force: ['force','lethal','deadly','taser','baton','arc','resistance','use of force'],
@@ -158,60 +151,92 @@ const TOPICS = {
   layoff: ['layoff','laid off','recall','seniority'],
   probationary: ['probationary','probation','new employee','new hire'],
   'drug testing': ['drug test','alcohol test','random test','reasonable suspicion'],
-  maps: ['map','maps','zone','zones','boundary','boundaries','district','sector','beat','jurisdiction','police zone','blank map','patrol area'],
+  maps: ['map','maps','zone','zones','boundary','boundaries','district','sector','beat','jurisdiction','police zone','blank map','patrol area','mile marker','mile post','school map'],
   'zone 5': ['zone','zone 5','police zone','sector','beat','patrol zone'],
-  marijuana: ['marijuana','cannabis','weed','thc','hemp'],
-  alcohol: ['alcohol','open container','underage','liquor'],
-  cheat: ['cheat','cheat sheet','quick reference','reference card'],
+  'zone 1': ['zone 1','zone one','police zone 1'],
+  'zone 2': ['zone 2','zone two','police zone 2'],
+  'zone 3': ['zone 3','zone three','police zone 3'],
+  'zone 4': ['zone 4','zone four','police zone 4'],
+  marijuana: ['marijuana','cannabis','weed','thc','hemp','sb 56','3796','plain smell','dispensary','homegrow','home grow'],
+  alcohol: ['alcohol','open container','underage','liquor','intoxicated'],
+  cheat: ['cheat','cheat sheet','quick reference','reference card','charge sheet'],
   sop: ['sop','standard operating','procedure'],
   'job description': ['job description','duties','responsibilities','job desc'],
-  communications: ['communications','dispatch','radio','911'],
-  court: ['court','court time','testimony','subpoena'],
+  communications: ['communications','dispatch','radio','911','sop manual'],
+  court: ['court','court time','testimony','subpoena','municipal court','bedford'],
   'use of force': ['use of force','force continuum','arc','less lethal'],
   strangulation: ['strangulation','strangling','choking','neck','throttle'],
   warrant: ['warrant','search warrant','arrest warrant','no knock'],
+  felony: ['felony','felony charge','felonious','f1','f2','f3','f4','f5','bindover','grand jury'],
+  misdemeanor: ['misdemeanor','misd','m1','m2','m3','m4','citation','charge'],
+  'criminal charges': ['criminal charge','charges','charging','complaint','affidavit','probable cause affidavit'],
+  theft: ['theft','steal','shoplifting','robbery','burglary'],
+  assault: ['assault','battery','menacing','threatening','stalking'],
+  trespass: ['trespass','aggravated trespass','criminal trespass'],
+  damage: ['criminal damaging','vandalism','property damage','mischief'],
+  sexual: ['sexual imposition','rape','gross sexual','indecent'],
+  fraud: ['fraud','forgery','identity theft','financial crime','wire transfer'],
+  missing: ['missing','missing person','runaway','endangered','amber'],
+  death: ['death','death investigation','coroner','doa','suicide','homicide','doe'],
+  mobile: ['mobile device','cell phone','phone','digital evidence','extraction','mobile device flow'],
+  tox: ['tox','toxicology','blood sample','urine sample','preservation letter','biological sample'],
+  phone: ['phone','cell phone','mobile','iphone','android','device','extraction','passcode'],
+  activity: ['activity report','monthly activity','daily activity','performance'],
+  financial: ['financial crime','financial crimes contacts','fraud contacts','wire transfer'],
+  badge: ['badge','badge number','officer','roster','personnel'],
+  'special needs': ['special needs','disability','autism','emergency information'],
+  ebike: ['ebike','e-bike','electric bike','bicycle'],
+  tracking: ['tracking','tracking device','stalking','gps','airtag'],
+  religion: ['religion','religious','faith'],
+  union: ['union','opba','spd union','labor'],
+  contracts: ['contract','collective bargaining','cba','agreement'],
+  'amended ordinance': ['amended ordinance','ordinance change','ordinance update'],
 };
 
-// Score files by relevance - checks both filename AND content keywords
 const findFiles = async (question) => {
   try {
     const files = await getAllFiles();
     const q = question.toLowerCase();
 
-    // Build search terms from question
     let terms = q.split(/\s+/).filter(w => w.length > 2);
 
-    // Add mapped topic terms
     for (const [key, vals] of Object.entries(TOPICS)) {
       if (q.includes(key)) terms = [...new Set([...terms, ...vals])];
     }
 
-    // Score each file
+    const peerCities = ['streetsboro','mayfield heights','aurora','twinsburg','highland heights','maple heights','independance','independence','bedford'];
+    const wantsComparison = /compare|comparison|other department|other city|other cities|peer|benchmark|versus|vs\.|vs /i.test(q);
+
     const scored = files.map(f => {
       const name = f.name.toLowerCase();
       let score = 0;
 
-      // Score by filename matches
       for (const t of terms) {
         if (name.includes(t)) score += 3;
       }
 
-      // Boost General Orders
       if (/g\d{4}/i.test(f.name)) score += 1;
 
-      // Boost files with exact question words in name
       const qWords = q.split(/\s+/).filter(w => w.length > 3);
       for (const w of qWords) {
         if (name.includes(w)) score += 2;
       }
 
+      if ((q.includes('contract') || q.includes('cba') || q.includes('collective bargaining')) && name.includes('solon') && name.includes('contract')) {
+        score += 10;
+      }
+
+      if (!wantsComparison) {
+        for (const city of peerCities) {
+          if (name.includes(city)) { score = Math.max(0, score - 8); }
+        }
+      }
+
       return { ...f, score };
     });
 
-    // Return top 5 most relevant files (increased from 4)
-    const relevant = scored.filter(f => f.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
+    const relevant = scored.filter(f => f.score > 0).sort((a, b) => b.score - a.score).slice(0, 6);
 
-    // If nothing scored, do a broader search
     if (relevant.length === 0) {
       const broader = scored.sort((a, b) => b.score - a.score).slice(0, 2);
       return broader.filter(f => f.score > 0);
@@ -244,7 +269,102 @@ RESISTING ARREST [Solon Ord. 606.16]: M2.
 FAILURE TO COMPLY/FLEEING [Solon Ord. 606.165]: Failure to comply with traffic order = M1. Willfully fleeing police in motor vehicle = felony (F4 no substantial risk; F3 substantial risk).
 ALCOHOL - OPEN CONTAINER IN VEHICLE [Solon Ord. 612.04]: Minor misdemeanor.
 ALCOHOL - UNDERAGE POSSESSION [Solon Ord. 612.09]: Minor misdemeanor 1st offense; M4 subsequent.
-CANNABIS - ADULT POSSESSION [Solon Ord. 624.02]: Adults 21+ may possess up to 2.5 oz. No public consumption. No use while driving.
+=== MARIJUANA / CANNABIS LAW UPDATE (SB 56, Effective March 20, 2026) ===
+NOTE: ORC Chapter 3780 was REPEALED and replaced by ORC Chapter 3796 - Marijuana Control Program.
+
+ADULT USE POSSESSION [ORC 3796.221]: Adults 21+ may possess up to 2.5 oz plant material or 15 grams extract obtained from a LICENSED OHIO DISPENSARY. Must be from licensed Ohio dispensary — cannot possess marijuana from another state.
+HOME GROW [ORC 3796.04]: Adults 21+ may grow up to 6 plants at primary residence (max 12 plants per residence). Must be in secured, enclosed area not visible from public space. Cannot grow at rental that prohibits it.
+TRANSFER [ORC 3796.221]: May transfer up to 2.5 oz plant material or 15 grams extract to another adult 21+ WITHOUT payment, but only at private residential property.
+PUBLIC CONSUMPTION [ORC 3796.06(C)(2)]: No smoking/vaping marijuana in any public place or place of employment = MM. No consumption in vehicle by operator OR passenger when vehicle is being operated = M3 for passenger, MM for operator.
+TRANSPORTATION [ORC 3796.062]: Adult use/medical marijuana must be in original unopened packaging OR if opened, stored in trunk (or behind last seat if no trunk). Homegrown must be in trunk. Violation = MM.
+PARAPHERNALIA IN VEHICLE [ORC 2925.141]: Must be in original unopened packaging or in trunk if opened = MM.
+SALES TO MINORS [ORC 3796.06(F)]: Giving/selling marijuana to person under 21 = M1.
+TRAFFICKING [ORC 2925.03]: Any sale or transfer outside authorized dispensary rules = trafficking.
+ILLEGAL CULTIVATION [ORC 2925.03/2925.04]: Growing outside home grow rules = illegal cultivation.
+
+PLAIN SMELL CASE LAW — CONFLICTING DECISIONS (Ohio Supreme Court has NOT ruled):
+- State v. Dejournett (2026): Burning marijuana smell ALONE = PC to search (9th District). It is still illegal to smoke in a vehicle.
+- State v. Gray (2025): Raw marijuana smell ALONE is NO LONGER sufficient for PC (1st District). Smell is still relevant factor under totality of circumstances but must be coupled with other factors (smoke in vehicle, impairment signs, etc.)
+
+OFFICER GUIDANCE FOR MARIJUANA STOPS:
+1. Note whether smell is BURNING, BURNT, or RAW marijuana — burning/burnt is stronger PC indicator
+2. Ask clarifying questions before searching: "How much do you have? Where did you get it? Can I see original packaging?"
+3. Look for totality of circumstances: impairment signs, smoke in vehicle, paraphernalia in plain view
+4. Document all observations thoroughly
+5. Improperly transported marijuana (not in original packaging/trunk) = MM and may support vehicle impoundment
+6. Passenger smoking marijuana in vehicle while being operated = M3; vehicle may be impounded
+7. Max THC in adult use extracts is now 70%
+8. Hemp products with more than .4 mg THC per container are NOT legal hemp
+
+SOLON ORDINANCE: Solon Ord. 624.02 — Adults 21+ cannabis possession (references state law framework)
+
+=== JUVENILE DIVERSION RESOURCES ===
+CUYAHOGA COUNTY EARLY INTERVENTION & DIVERSION CENTER (EIDC) — for unruly youth alternative to court:
+- Main Number: 216-443-3419
+- Location: Metzenbaum Center, 3343 Community College Ave, Cleveland, Ohio 44115
+- EIDC Managers: Terance Palange (216-443-5493), Michelle Glenn-Preston (216-698-4793), Taronda Montgomery (216-698-4727)
+- Hours: 8:30am-4:30pm Monday-Friday, excluding holidays
+INELIGIBLE FOR UNRULY FILING IF: actively on probation, pending official case, 10 years of age or younger, currently in custody of Children and Family Services
+KEY FACTS: Formal Unruly Charges will NOT be filed with the Court. Unruly youth are not scheduled for court hearings. EIDC staff CANNOT remove children from home. Unruly youth will NOT be placed on home detention monitor. EIDC does NOT provide housing.
+PROCESS: Biological parent(s)/legal guardian(s) who are Cuyahoga County residents can contact EIDC directly. EIDC reviews unruly statement; Ohio Guidestone calls family within 24 hours to schedule assessment; individualized service plan (ISP) created; family assigned case management services.
+Addresses: school truancy, poor grades, learning disabilities, mental health, disrespect toward authority, substance abuse, referrals for trauma/abuse counseling.
+
+BELLEFAIRE JCB BEHAVIORAL HEALTH RESPITE (short-term break for caregivers of child/adolescent):
+- Contact: Rashad Davis, Program Director — 216-320-8339, davisr@bellefairejcb.org
+- Contact: Antonio Lester, Program Coordinator — 216-320-8465, lestera@bellefairejcb.org
+- Location: 22001 Fairmount Boulevard, Shaker Heights, OH 44118
+- Phone: (216) 320-8502 | Website: BellefaireJCB.org
+Eligibility: Must be enrolled in Medicaid's OhioRISE program with referral from care coordinator. Sessions ~3 hours, scheduled in advance, 24hr notice for cancellations. No weapons or medications allowed. Transportation provided. On/off campus activities.
+
+=== LATERAL TRANSFER PAY & VACATION (Memorandum of Agreement, March 2026) ===
+Modifies CBA Article 18 (Vacation) and Article 23 (Compensation) for Lateral Transfers.
+PAY SCALE PLACEMENT upon completing Field Training Program based on prior years of continuous full-time Peace Officer service:
+- 2-5 years prior service = 1 Year Rate
+- 6-10 years prior service = 2 Year Rate
+- More than 10 years prior service = 3 Year Rate
+Applies to Lateral Transfers hired after MOA execution AND current officers hired within 4 years of MOA who qualify. NOT retroactive to original hire date.
+
+=== DOMESTIC VIOLENCE VICTIM RESOURCES (per ORC 2935.032(C)) ===
+Officer MUST give a copy of DV information form to victim.
+
+BEDFORD MUNICIPAL COURT (misdemeanor DV and initial felony filing):
+- Address: 165 Center Road, Bedford, Ohio 44146
+- Phone: (440) 232-3420
+- Mandatory appearance: next business day at 10:00 AM
+- Victim Assistance: Clarissa Greer — 24hr cell (440) 840-8604; Office (440) 735-6635; cgreer@bedfordmuni.org
+- City Prosecutor: Lon Stolarsky — (216) 694-3987, 5333 Northfield Road Suite 250, Bedford Heights OH 44146
+
+FELONY CASES moved to Cuyahoga County Common Pleas:
+- General Felony Division: (216) 443-7800, 1200 Ontario Street 9th Floor, Cleveland OH 44113
+
+JUVENILE CASES:
+- Cuyahoga County Juvenile Court: (216) 443-8400, 2163 E. 22nd St., Cleveland OH 44115
+- May also contact Juvenile Officer in Solon Detective Bureau
+
+24-HOUR DV HOTLINES:
+- Domestic Violence and Child Advocacy Center: (216) 391-HELP (4357) — legal advocacy, support groups, shelter referral
+- Ohio Attorney General Crime Victim Assistance: (800) 582-2877
+- WomenSafe Copeline: (888) 285-5665
+- KIDS Hotline (Child Abuse): (216) 696-KIDS (5437)
+- Witness/Victim Services: (216) 443-7345
+
+=== CUYAHOGA COUNTY DIVERSION CENTER (Mental Health/Substance Use Crisis Alternative) ===
+Police Help Line (FrontLine Service): 216-623-6888
+Process: Officer calls FrontLine Service for phone screening (prosecutor may be engaged). If individual meets legal and health criteria, FrontLine calls Diversion Center with ETA; officer transports individual, signs them in, and leaves. If individual does NOT meet criteria, transport to Jail, Crisis Stabilization Unit, St. Vincent Psychiatric Emergency Room, or nearest hospital instead. Individual can stay up to nine days for substance use and/or mental health services.
+Use this as an alternative to arrest/jail for qualifying individuals in mental health or substance use crisis.
+
+=== CRIMINAL CHARGES FORMS AVAILABLE IN DRIVE ===
+The following fillable forms exist in the Criminal Charges folder — direct officers to the correct one:
+- CIF.pdf — Data Entry Form for offender/incident information
+- Felony Bond Request.pdf — CIF Data Entry Form for felony bond requests
+- Misdemeanor Bond Request (custodial).pdf — For misdemeanor bond requests
+- AFFIDAVIT FOR FELONY ARREST.pdf — Felony arrest affidavit template
+- AFFIDAVIT FOR MISDEMEANOR ARREST.pdf — Misdemeanor arrest affidavit template
+- BCI Submission Sheet.pdf — Evidence submission to Ohio BCI (labs in Bowling Green, Richfield, London, Cambridge, Youngstown, Athens)
+- CVD - Warrant Entry Form.pdf — LEADS warrant entry sheet
+- CVD - Cancellation Form.pdf — LEADS warrant/wanted person cancellation sheet
+- Domestic Violence Packet — Victim resource packet (see DV resources above)
+NOTE: WarrantCreator.pdf may not display properly — direct officer to check with Detective Bureau if this file won't open.
 DOGS ON LEASH [Solon Ord. 618.16]: Dogs must be on leash when off owner's property. Minor misdemeanor.
 NO FEEDING DEER [Solon Ord. 618.127]: Minor misdemeanor.
 
@@ -325,7 +445,7 @@ STREET RACING: Solon Ord. 434.07(b) / ORC 4511.251(B)`;
 
 const SYSTEM = `You are the Solon PD Assistant — a comprehensive reference tool for officers, supervisors, and staff of the Solon Police Department.
 
-You have access to ALL documents in the department's Google Drive including subfolders (Policy, Maps, Cheat Sheets, SOPs, Forms, etc.) and the following baked-in reference content.
+You have access to ALL documents in the department's Google Drive including subfolders: Policy (General Orders), Maps, Cheat Sheets, Criminal Charges, General Orders, Juvenile, Contracts, SPD Union, Amended City Ordinances, School Maps, Binder, Religion, Ebikes, PDF Files, Personnel Orders, Addendums, Special Orders, Website Files, and all root-level files. You also have the following baked-in reference content.
 
 When answering questions:
 1. Use Google Drive document content when provided — it is the most authoritative source
@@ -338,6 +458,13 @@ When answering questions:
 8. If Drive content is a scanned PDF (unreadable), say so and direct officer to the clickable link
 9. Always end with document links as clickable buttons
 10. For maps/zones/boundaries — provide the link to the map file directly
+11. For badge numbers, officer roster, personnel info — search Drive for Badge Numbers.docx
+12. For criminal charges/charging decisions — search Drive for Felony Charges.pdf and Misd Charges.pdf
+13. For mobile device evidence — search Drive for Mobile Device.pdf
+14. For tox/blood samples — search Drive for SPD Tox Samples Preservation Letter
+15. IF NO RELEVANT DOCUMENT OR BAKED-IN CONTENT IS FOUND for the question: do NOT guess, do NOT answer from general outside knowledge as if it were confirmed department policy, and do NOT stay silent about the gap. Clearly state that this specific policy/document/topic was not found in the Google Drive or reference library, and explicitly tell the administrator what to add. Format it like:
+"⚠️ Not found in current records. I could not locate a document or policy covering [specific topic]. To answer this accurately, add a document such as [specific suggested file name/topic] to the appropriate Google Drive folder (e.g., Policy, Cheat Sheets, Criminal Charges, Maps, etc.), and I'll be able to answer this going forward."
+Only use general legal/law enforcement knowledge as a clearly labeled fallback (e.g., "General Ohio law suggests X, but this is not confirmed Solon PD policy — please verify") — never present outside knowledge as if it were confirmed department policy.
 
 FORMAT FOR DOCUMENT LINKS:
 Always format document links exactly like this so they render as clickable buttons:
@@ -367,7 +494,6 @@ app.post('/chat', async (req, res) => {
         context += `\n\n=== ${f.name} ===\nLink: ${f.webViewLink}\n\n${content.slice(0, 6000)}`;
         links.push(`📄 ${f.name}: ${f.webViewLink}`);
       } else {
-        // Still include the link even if content is unreadable (scanned PDF)
         links.push(`📄 ${f.name} (scanned PDF - view directly): ${f.webViewLink}`);
       }
     }
