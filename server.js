@@ -55,6 +55,152 @@ const getAllFiles = async () => {
   return files;
 };
 
+// Search CourtListener for relevant Ohio / federal / SCOTUS case law
+// Requires a free CourtListener account + API token (COURTLISTENER_API_KEY env var).
+// As of 2026 the v4 API requires authentication - anonymous requests get 401.
+// Fails gracefully (returns empty array) if no key is set or the call fails,
+// so the bot falls back to baked-in case law instead of breaking.
+// Free tier is rate-limited (5/min, 50/hr, 125/day) so results are cached for
+// 24 hours per normalized query to conserve quota across the department.
+const caseLawCache = new Map();
+const CASE_LAW_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+const searchCaseLaw = async (query) => {
+  const apiKey = process.env.COURTLISTENER_API_KEY;
+  if (!apiKey) {
+    console.log('COURTLISTENER_API_KEY not set - skipping live case law search');
+    return [];
+  }
+
+  const cacheKey = query.toLowerCase().trim().slice(0, 200);
+  const cached = caseLawCache.get(cacheKey);
+  if (cached && Date.now() - cached.time < CASE_LAW_CACHE_TTL) {
+    console.log('CourtListener cache hit for:', cacheKey);
+    return cached.results;
+  }
+
+  try {
+    const url = `https://www.courtlistener.com/api/rest/v4/search/?q=${encodeURIComponent(query)}&type=o&order_by=score%20desc`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'SolonPDAssistant/1.0',
+        'Authorization': `Token ${apiKey}`,
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.error('CourtListener API error:', res.status);
+      if (res.status === 429) console.error('CourtListener rate limit exceeded for today');
+      return [];
+    }
+    const data = await res.json();
+    const results = (data.results || []).slice(0, 3).map(r => ({
+      caseName: r.caseName || r.case_name || 'Unknown case',
+      court: r.court || r.court_citation_string || r.court_id || 'Unknown court',
+      dateFiled: r.dateFiled || r.date_filed || '',
+      url: 'https://www.courtlistener.com' + (r.absolute_url || ''),
+    }));
+
+    caseLawCache.set(cacheKey, { results, time: Date.now() });
+    return results;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      console.error('CourtListener request timed out after 8s');
+    } else {
+      console.error('CourtListener search error:', e.message);
+    }
+    return [];
+  }
+};
+
+// Search LegiScan for pending/recent Ohio legislation relevant to law enforcement.
+// Requires a free LegiScan account + API key (LEGISCAN_API_KEY env var).
+// Free tier: 30,000 queries/month - generous, no aggressive caching needed but still cached 6hrs.
+const legiscanCache = new Map();
+const LEGISCAN_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+const searchPendingLegislation = async (query) => {
+  const apiKey = process.env.LEGISCAN_API_KEY;
+  if (!apiKey) {
+    console.log('LEGISCAN_API_KEY not set - skipping pending legislation search');
+    return [];
+  }
+
+  const cacheKey = query.toLowerCase().trim().slice(0, 200);
+  const cached = legiscanCache.get(cacheKey);
+  if (cached && Date.now() - cached.time < LEGISCAN_CACHE_TTL) {
+    return cached.results;
+  }
+
+  try {
+    const url = `https://api.legiscan.com/?key=${apiKey}&op=getSearch&state=OH&query=${encodeURIComponent(query)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.error('LegiScan API error:', res.status);
+      return [];
+    }
+    const data = await res.json();
+    if (data.status !== 'OK' || !data.searchresult) return [];
+
+    const results = Object.values(data.searchresult)
+      .filter(v => v && typeof v === 'object' && v.bill_number)
+      .slice(0, 5)
+      .map(b => ({
+        billNumber: b.bill_number,
+        title: b.title || '',
+        lastAction: b.last_action || '',
+        lastActionDate: b.last_action_date || '',
+        url: b.url || '',
+      }));
+
+    legiscanCache.set(cacheKey, { results, time: Date.now() });
+    return results;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      console.error('LegiScan request timed out after 8s');
+    } else {
+      console.error('LegiScan search error:', e.message);
+    }
+    return [];
+  }
+};
+
+// Verify/resolve a case law citation via CourtListener's citation-lookup endpoint.
+// Separate from the general search - this validates a SPECIFIC citation string
+// (e.g. "410 U.S. 113") rather than searching by topic.
+const verifyCitation = async (text) => {
+  const apiKey = process.env.COURTLISTENER_API_KEY;
+  if (!apiKey) return [];
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('https://www.courtlistener.com/api/rest/v4/citation-lookup/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `text=${encodeURIComponent(text)}`,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (Array.isArray(data) ? data : []).slice(0, 5);
+  } catch (e) {
+    console.error('Citation lookup error:', e.message);
+    return [];
+  }
+};
+
 const readFile = async (fileId, mimeType) => {
   try {
     const drive = google.drive({ version: 'v3', auth: getAuth() });
@@ -306,6 +452,46 @@ OFFICER GUIDANCE FOR MARIJUANA STOPS:
 
 SOLON ORDINANCE: Solon Ord. 624.02 — Adults 21+ cannabis possession (references state law framework)
 
+=== SOLON PD ASSISTANT — CHANGELOG (for administrator reference; mention only if asked "what's new" or similar) ===
+August 2026: Added live case law search (CourtListener), pending Ohio legislation tracker (LegiScan), citation verification, HB 492 (driver/passenger ID) and HB 20 (15-foot buffer) pending law content, Bedford/Cuyahoga court record quick-links, deterministic ordinance code library linking, MOA vs. recruitment flyer disambiguation fix, and gap-reporting for missing content.
+July 2026: Added Solon CBA/contract, marijuana law update (SB 56), domestic violence resources, juvenile diversion resources, mental health crisis diversion center info, criminal charges form directory.
+Ongoing: Google Drive is searched live for all General Orders, policies, cheat sheets, and maps.
+
+=== ⚠️ UPCOMING OHIO LAW CHANGES — NOT YET IN EFFECT (effective ~October 5, 2026, 90 days after July 7, 2026 signing) ===
+DO NOT tell officers to enforce these until they are confirmed in effect. Always note the pending status when citing.
+
+HOUSE BILL 492 — DRIVER/PASSENGER IDENTIFICATION REQUIREMENT:
+- Creates new offense: driver OR passenger refusing to provide name, address, or date of birth during a LAWFUL traffic stop when officer reasonably suspects a motor vehicle law violation
+- Penalty: Fourth-degree misdemeanor (up to 30 days jail, $250 fine)
+- Passengers are NOT required to answer questions beyond that basic identifying info, and are not required to reveal information that could disclose their age unless age is relevant to the suspected offense
+- Also broadens "interference with an officer" under the motor vehicle code from minor misdemeanor to SECOND-degree misdemeanor (up from minor misdemeanor)
+- Signed by Gov. DeWine July 7, 2026; takes effect ~October 5, 2026 (90 days after signing)
+- Responds to Ohio appellate courts repeatedly holding that mere refusal to give a name during a traffic stop did not constitute obstructing official business
+
+HOUSE BILL 20 — 15-FOOT "HALO"/BUFFER ZONE LAW FOR FIRST RESPONDERS:
+- Prohibits knowingly approaching or remaining within 15 feet of a first responder (law enforcement officer, EMS, firefighter, or probation officer) engaged in lawful duty, AFTER the person has received a warning to stay back/move away/stop interfering, while interfering with the responder's duties OR threatening physical harm
+- Base penalty: First-degree misdemeanor (up to 180 days jail, $1,000 fine)
+- If the violation creates a risk of physical harm to the first responder: FOURTH-degree FELONY
+- If the violation creates a risk of physical harm to any other (non-responder) person: FIFTH-degree FELONY
+- Also raises "obstructing official business" to a fourth-degree felony when it creates a risk of physical harm to an emergency service responder (up from second-degree misdemeanor)
+- Does NOT prohibit people from recording/observing from outside the 15-foot zone — a verbal warning must be given first before the buffer becomes enforceable
+- Signed by Gov. DeWine July 7, 2026; takes effect ~October 5, 2026 (90 days after signing)
+- Note: Similar buffer-zone laws in other states (Indiana's 25-foot law) have faced federal court challenges on vagueness/First Amendment grounds — expect possible litigation
+
+=== PUBLIC COURT RECORDS — QUICK ACCESS (informational links only, not live-queried) ===
+BEDFORD MUNICIPAL COURT case search (misdemeanor/traffic/DV cases for Solon):
+- TR/CR Case Search: https://www.bedfordmuni.org/info/index/32
+- Today's TR/CR Docket: https://www.bedfordmuni.org/info/index/31
+- Active Warrants page: https://www.bedfordmuni.org/info/activewarrants
+- Phone: (440) 232-3420
+NOTE: This search requires a CAPTCHA and must be completed manually by the officer — it cannot be auto-queried.
+
+CUYAHOGA COUNTY COURT OF COMMON PLEAS (felony cases):
+- Docket Search: https://cpdocket.cp.cuyahogacounty.gov/Search.aspx
+- Clerk's docket information line: (216) 443-7974
+- Clerk of Courts address: 1200 Ontario Street, Cleveland, OH 44113
+IMPORTANT: Domestic Violence case information and Civil Stalking Protection Order cases are NOT available online per federal law/court direction — these must be obtained by calling the Clerk's docket line or visiting in person.
+
 === JUVENILE DIVERSION RESOURCES ===
 CUYAHOGA COUNTY EARLY INTERVENTION & DIVERSION CENTER (EIDC) — for unruly youth alternative to court:
 - Main Number: 216-443-3419
@@ -470,6 +656,10 @@ When answering questions:
 12. For criminal charges/charging decisions — search Drive for Felony Charges.pdf and Misd Charges.pdf
 13. For mobile device evidence — search Drive for Mobile Device.pdf
 14. For tox/blood samples — search Drive for SPD Tox Samples Preservation Letter
+15b. For case law questions — use LIVE CASE LAW SEARCH RESULTS when provided; always include the case name, court, and clickable CourtListener link. If no live results are found, use only well-established baked-in case law (Miranda v. Arizona, Graham v. Connor, Terry v. Ohio, Tennessee v. Garner) and clearly say a live search returned nothing new — do not invent case names or citations.
+15c. For questions about UPCOMING/PENDING Ohio law changes (like HB 492 or HB 20) — always state clearly that the law is NOT YET IN EFFECT and give the effective date. Never imply officers should enforce it before that date.
+15d. For court record / case status questions — provide the Bedford Municipal Court and/or Cuyahoga County Common Pleas links provided, and clearly state these must be searched manually (Bedford requires a CAPTCHA). Never claim to have looked up a specific case yourself.
+15e. For questions about PENDING/PROPOSED Ohio legislation not yet signed into law — use LIVE PENDING OHIO LEGISLATION results when provided, citing the bill number and current status clearly as NOT YET LAW. If no live results, only reference HB 492/HB 20 from your baked-in content and do not invent other bill numbers or statuses.
 15. IF NO RELEVANT DOCUMENT OR BAKED-IN CONTENT IS FOUND for the question: do NOT guess, do NOT answer from general outside knowledge as if it were confirmed department policy, and do NOT stay silent about the gap. Clearly state that this specific policy/document/topic was not found in the Google Drive or reference library, and explicitly tell the administrator what to add. Format it like:
 "⚠️ Not found in current records. I could not locate a document or policy covering [specific topic]. To answer this accurately, add a document such as [specific suggested file name/topic] to the appropriate Google Drive folder (e.g., Policy, Cheat Sheets, Criminal Charges, Maps, etc.), and I'll be able to answer this going forward."
 Only use general legal/law enforcement knowledge as a clearly labeled fallback (e.g., "General Ohio law suggests X, but this is not confirmed Solon PD policy — please verify") — never present outside knowledge as if it were confirmed department policy.
@@ -507,8 +697,47 @@ app.post('/chat', async (req, res) => {
       }
     }
 
+    const isOrdinanceQuestion = /ordinance|solon ord|municipal code|speed limit|school zone|traffic code|general offense|amlegal/i.test(question);
+    if (isOrdinanceQuestion) {
+      links.push('📚 Solon Code of Ordinances (full code library): https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1');
+    }
+
+    const isCourtRecordsQuestion = /court record|case search|docket|bedford court|bedford municipal|cuyahoga.{0,15}(docket|common pleas|court)|active warrant|court case|case status/i.test(question);
+    if (isCourtRecordsQuestion) {
+      links.push('⚖️ Bedford Municipal Court Case Search: https://www.bedfordmuni.org/info/index/32');
+      links.push('⚖️ Cuyahoga County Common Pleas Docket Search: https://cpdocket.cp.cuyahogacounty.gov/Search.aspx');
+    }
+
+    const wantsCaseLaw = /case law|supreme court|scotus|precedent|court ruling|court decision|recent ruling|appellate|court of appeals|ohio supreme court|9th district|8th district|1st district|circuit court|state v\.?\s|v\.\s*ohio|u\.s\.\s*v\.?\s/i.test(question);
+    let caseLawBlock = '';
+    if (wantsCaseLaw) {
+      const cases = await searchCaseLaw(question);
+      if (cases.length > 0) {
+        caseLawBlock = '\n\n=== LIVE CASE LAW SEARCH RESULTS (from CourtListener — verify before relying on in court) ===\n' +
+          cases.map(c => `${c.caseName} (${c.court}${c.dateFiled ? ', ' + c.dateFiled : ''})\nLink: ${c.url}`).join('\n\n');
+        cases.forEach(c => links.push(`⚖️ ${c.caseName}: ${c.url}`));
+      } else {
+        caseLawBlock = '\n\n=== CASE LAW SEARCH ===\nNo live case law results available for this query (either no API key configured or no matches found). Rely on baked-in case law knowledge (Miranda, Graham v. Connor, Terry v. Ohio, Tennessee v. Garner, etc.) if applicable, and clearly note that a live search was not available or found nothing new — do not invent case names or citations.';
+      }
+    }
+
+    const wantsPendingLegislation = /pending legislation|new ohio law|upcoming law|proposed bill|bill status|legiscan|ohio legislature|ohio house bill|ohio senate bill|new bill|recent legislation|what's changing|law changing/i.test(question);
+    let legislationBlock = '';
+    if (wantsPendingLegislation) {
+      const bills = await searchPendingLegislation(question);
+      if (bills.length > 0) {
+        legislationBlock = '\n\n=== LIVE PENDING OHIO LEGISLATION (from LegiScan) ===\n' +
+          bills.map(b => `${b.billNumber}: ${b.title}\nStatus: ${b.lastAction}${b.lastActionDate ? ' (' + b.lastActionDate + ')' : ''}\nLink: ${b.url}`).join('\n\n');
+        bills.forEach(b => links.push(`📜 ${b.billNumber} - ${b.title}: ${b.url}`));
+      } else {
+        legislationBlock = '\n\n=== PENDING LEGISLATION SEARCH ===\nNo live LegiScan results available (either no API key configured or no matches found). Only cite the HB 492 / HB 20 pending law content already in your reference material if relevant — do not invent bill numbers or status.';
+      }
+    }
+
     const system = SYSTEM +
       (context ? `\n\n=== LIVE CONTENT FROM GOOGLE DRIVE ===\n${context}` : '') +
+      caseLawBlock +
+      legislationBlock +
       (links.length ? `\n\n=== DOCUMENT LINKS — INCLUDE ALL OF THESE AS CLICKABLE BUTTONS IN YOUR RESPONSE ===\n${links.join('\n')}` : '');
 
     const response = await client.messages.create({
