@@ -17,33 +17,98 @@ const getAuth = () => {
   });
 };
 
+// Cache all files including subfolders
 let fileCache = null;
 let cacheTime = 0;
-const TTL = 5 * 60 * 1000;
+const TTL = 3 * 60 * 1000; // 3 minutes
 
 const getAllFiles = async () => {
   if (fileCache && Date.now() - cacheTime < TTL) return fileCache;
   const drive = google.drive({ version: 'v3', auth: getAuth() });
   let files = [], pageToken = null;
+
+  // Search ALL files across ALL folders and subfolders
   do {
     const r = await drive.files.list({
-      q: `trashed=false and (mimeType='application/pdf' or mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='text/plain')`,
-      fields: 'nextPageToken, files(id, name, webViewLink, mimeType)',
-      pageSize: 100, orderBy: 'name',
+      q: `trashed=false and (
+        mimeType='application/pdf' or 
+        mimeType='application/vnd.google-apps.document' or 
+        mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or
+        mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or
+        mimeType='application/vnd.google-apps.spreadsheet' or
+        mimeType='text/plain' or
+        mimeType='application/msword'
+      )`,
+      fields: 'nextPageToken, files(id, name, webViewLink, mimeType, parents, description)',
+      pageSize: 100,
+      orderBy: 'name',
       pageToken: pageToken || undefined,
+      spaces: 'drive',
     });
     files = files.concat(r.data.files || []);
     pageToken = r.data.nextPageToken;
   } while (pageToken);
+
   fileCache = files;
   cacheTime = Date.now();
-  console.log(`Cached ${files.length} Drive files`);
+  console.log(`Cached ${files.length} Drive files from all folders`);
   return files;
 };
 
+// Read file content with better extraction
+const readFile = async (fileId, mimeType) => {
+  try {
+    const drive = google.drive({ version: 'v3', auth: getAuth() });
+
+    // Google Docs - export as plain text (best quality)
+    if (mimeType === 'application/vnd.google-apps.document') {
+      const r = await drive.files.export({ fileId, mimeType: 'text/plain' });
+      return String(r.data).slice(0, 8000);
+    }
+
+    // Google Sheets - export as CSV
+    if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+      const r = await drive.files.export({ fileId, mimeType: 'text/csv' });
+      return String(r.data).slice(0, 8000);
+    }
+
+    // Word docs - export as plain text
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        mimeType === 'application/msword') {
+      try {
+        const r = await drive.files.export({ fileId, mimeType: 'text/plain' });
+        return String(r.data).slice(0, 8000);
+      } catch {
+        const r = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
+        return Buffer.from(r.data).toString('utf8', 0, 8000)
+          .replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s{3,}/g, '\n').trim();
+      }
+    }
+
+    // PDFs and other files - download and extract text
+    const r = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
+    const text = Buffer.from(r.data).toString('utf8', 0, 10000)
+      .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+      .replace(/\s{3,}/g, '\n')
+      .trim();
+
+    // Check if we got readable text (not binary garbage)
+    const readableChars = (text.match(/[a-zA-Z\s]/g) || []).length;
+    const totalChars = text.length;
+    if (totalChars > 0 && readableChars / totalChars > 0.5) {
+      return text.slice(0, 8000);
+    }
+    return null; // Scanned PDF - return null
+  } catch (e) {
+    console.error('Read error:', e.message);
+    return null;
+  }
+};
+
+// Comprehensive topic mapping
 const TOPICS = {
   pursuit: ['pursuit','vehicle','chase','fleeing'],
-  force: ['force','lethal','deadly','taser','baton','arc','resistance'],
+  force: ['force','lethal','deadly','taser','baton','arc','resistance','use of force'],
   'body camera': ['video','patrol video','body cam','mvr','camera','recording'],
   bodycam: ['video','patrol video','body cam','mvr'],
   evidence: ['evidence','property','chain of custody','beast'],
@@ -56,8 +121,8 @@ const TOPICS = {
   bolawrap: ['bolawrap','bola','wrap','restraint'],
   helmet: ['helmet','ballistic','protective'],
   overtime: ['overtime','duty time','time off','shift','kelly','lunch','break'],
-  sick: ['duty time','time off','sick','leave'],
-  vacation: ['duty time','time off','vacation','leave'],
+  sick: ['sick','sick leave','illness'],
+  vacation: ['vacation','leave','time off'],
   holiday: ['holiday','paid holiday','kelly day'],
   hiring: ['hiring','hire','employment','background','recruit'],
   record: ['record','document','public records','retention'],
@@ -66,8 +131,8 @@ const TOPICS = {
   amber: ['amber','alert','missing child'],
   fire: ['fire','emergency'],
   media: ['media','sanitization','press','release'],
-  crypto: ['crypto','virtual currency','bitcoin','digital asset'],
-  detective: ['detective','bureau','investigation'],
+  crypto: ['crypto','virtual currency','bitcoin','digital asset','cryptocurrency'],
+  detective: ['detective','bureau','investigation','callout','call-out'],
   corrections: ['corrections','jail','inmate','detention'],
   'light duty': ['light duty','temporary','modified'],
   wellness: ['wellness','fitness','health','gym'],
@@ -93,43 +158,69 @@ const TOPICS = {
   layoff: ['layoff','laid off','recall','seniority'],
   probationary: ['probationary','probation','new employee','new hire'],
   'drug testing': ['drug test','alcohol test','random test','reasonable suspicion'],
+  maps: ['map','maps','zone','zones','boundary','boundaries','district','sector','beat','jurisdiction','police zone','blank map','patrol area'],
+  'zone 5': ['zone','zone 5','police zone','sector','beat','patrol zone'],
+  marijuana: ['marijuana','cannabis','weed','thc','hemp'],
+  alcohol: ['alcohol','open container','underage','liquor'],
+  cheat: ['cheat','cheat sheet','quick reference','reference card'],
+  sop: ['sop','standard operating','procedure'],
+  'job description': ['job description','duties','responsibilities','job desc'],
+  communications: ['communications','dispatch','radio','911'],
+  court: ['court','court time','testimony','subpoena'],
+  'use of force': ['use of force','force continuum','arc','less lethal'],
+  strangulation: ['strangulation','strangling','choking','neck','throttle'],
+  warrant: ['warrant','search warrant','arrest warrant','no knock'],
 };
 
+// Score files by relevance - checks both filename AND content keywords
 const findFiles = async (question) => {
   try {
     const files = await getAllFiles();
     const q = question.toLowerCase();
-    let terms = q.split(' ').filter(w => w.length > 3);
+
+    // Build search terms from question
+    let terms = q.split(/\s+/).filter(w => w.length > 2);
+
+    // Add mapped topic terms
     for (const [key, vals] of Object.entries(TOPICS)) {
-      if (q.includes(key)) terms = [...terms, ...vals];
+      if (q.includes(key)) terms = [...new Set([...terms, ...vals])];
     }
+
+    // Score each file
     const scored = files.map(f => {
-      const n = f.name.toLowerCase();
+      const name = f.name.toLowerCase();
       let score = 0;
-      for (const t of terms) if (n.includes(t)) score += 3;
+
+      // Score by filename matches
+      for (const t of terms) {
+        if (name.includes(t)) score += 3;
+      }
+
+      // Boost General Orders
       if (/g\d{4}/i.test(f.name)) score += 1;
+
+      // Boost files with exact question words in name
+      const qWords = q.split(/\s+/).filter(w => w.length > 3);
+      for (const w of qWords) {
+        if (name.includes(w)) score += 2;
+      }
+
       return { ...f, score };
     });
-    return scored.filter(f => f.score > 0).sort((a, b) => b.score - a.score).slice(0, 4);
+
+    // Return top 5 most relevant files (increased from 4)
+    const relevant = scored.filter(f => f.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
+
+    // If nothing scored, do a broader search
+    if (relevant.length === 0) {
+      const broader = scored.sort((a, b) => b.score - a.score).slice(0, 2);
+      return broader.filter(f => f.score > 0);
+    }
+
+    return relevant;
   } catch (e) {
     console.error('Search error:', e.message);
     return [];
-  }
-};
-
-const readFile = async (fileId, mimeType) => {
-  try {
-    const drive = google.drive({ version: 'v3', auth: getAuth() });
-    if (mimeType === 'application/vnd.google-apps.document') {
-      const r = await drive.files.export({ fileId, mimeType: 'text/plain' });
-      return String(r.data).slice(0, 6000);
-    }
-    const r = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
-    return Buffer.from(r.data).toString('utf8', 0, 8000)
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s{3,}/g, '\n').trim();
-  } catch (e) {
-    console.error('Read error:', e.message);
-    return null;
   }
 };
 
@@ -184,7 +275,7 @@ PROBATIONARY PERIOD [CBA Art. 3]: 12 months after completing Field Training Prog
 DISCIPLINE [CBA Art. 8]: Only for JUST CAUSE for non-probationary employees. Written notice required before suspension/discharge. Employee has 5 calendar days to respond in writing. Disciplinary action may be appealed through grievance procedure.
 EMPLOYEE RIGHTS [CBA Art. 6]: Copy of any departmental charge provided simultaneously with transmission to Chief. Polygraph only with employee CONSENT. Civilian complaints must be in writing and signed. Written reprimands over 2 years old NOT used for progressive discipline. Suspensions over 4 years old NOT used to support current action. Anonymous complaints kept in SEPARATE file.
 GRIEVANCE PROCEDURE [CBA Art. 10]: Step 1 = notify supervisor within 5 days; Step 2 = written to Chief within 5 days of Step 1; Step 3 = appeal to Mayor within 7 days of Step 2 decision. Time limits strictly adhered to — missing deadline = grievance waived.
-ARBITRATION [CBA Art. 11]: Must file within 10 days of Step 3 decision. Arbitrator selected by mutual agreement or AAA. Decision is FINAL AND BINDING. Losing party pays arbitrator fees.
+ARBITRATION [CBA Art. 11]: Must file within 10 days of Step 3 decision. Decision is FINAL AND BINDING. Losing party pays arbitrator fees.
 DUTY HOURS [CBA Art. 15]: 12-hour shifts = 84 hours per 2-week pay period. Kelly Day = one 12-hour day off every 42 days. 90 days notice required before changing from 12-hour shift schedule.
 OVERTIME [CBA Art. 16]: 12-hour shift = 1.5x for work over 84 hours/pay period, over 12 hours/day, or on Kelly Day. On-call/court time minimum 4 hours at 1.5x rate. Departmental meetings minimum 3 hours at 1.5x rate. Christmas, Thanksgiving, Memorial Day, July 4th fireworks = 2.25x rate.
 COMP TIME [CBA Art. 16-A]: Accrues at 1.5 hours per overtime hour. Max carryover = 112 hours. Between Jan 1-Nov 30 may accumulate up to 240 hours. Hours over 112 as of Nov 30 paid out in December.
@@ -200,10 +291,10 @@ OIC PAY [CBA Art. 25]: 1.5x Sergeant's rate per hour when assigned as Officer in
 FTO PAY [CBA Art. 25]: 2 hours paid overtime per shift as Field Training Officer.
 UNIFORM ALLOWANCE [CBA Art. 26]: $1,500 annual allowance for non-probationary employees, paid by March 1. Detectives: additional $50/month.
 HEALTH INSURANCE [CBA Art. 28]: Employee contribution: 2025=8% of COBRA; 2026=9%; 2027=10%. Life insurance: $25,000 term. Opt-out: 15% of yearly COBRA equivalent in 4 quarterly payments.
-DRUG TESTING [CBA Art. 29]: Post-accident testing when 2 of 5 conditions exist. Random testing at 10% annually. Reasonable suspicion testing. First positive = EAP; decline EAP = immediate discipline. Medical marijuana NOT a defense — any positive above threshold = violation.
-TUITION REIMBURSEMENT [CBA Art. 35]: Up to $5,250/year. Must earn C or above. Must repay if voluntarily leave within 3 years of last reimbursement.
+DRUG TESTING [CBA Art. 29]: Post-accident, random (10% annually), reasonable suspicion. First positive = EAP; decline EAP = immediate discipline. Medical marijuana NOT a defense.
+TUITION REIMBURSEMENT [CBA Art. 35]: Up to $5,250/year. Must earn C or above. Must repay if voluntarily leave within 3 years.
 
-=== CHARGE REFERENCE — CHEAT SHEETS ===
+=== CHARGE REFERENCE CHEAT SHEETS ===
 OVI: ORC 4511.19(A)(1)(a) — BAC .08-.17: ORC 4511.19(A)(1)(d) — BAC .17+: ORC 4511.19(A)(1)(h)
 SPEED: Solon Ord. 434.03 / ORC 4511.21
 RECKLESS OPERATION: Solon Ord. 434.02 / ORC 4511.20
@@ -229,28 +320,33 @@ MOVE OVER: Solon Ord. 432.40 / ORC 4511.213
 SEAT BELT DRIVER: Solon Ord. 438.29(b)(1) / ORC 4513.263(B)(1)
 CHILD RESTRAINT: Solon Ord. 438.28(a) / ORC 4511.81
 FOLLOWING TOO CLOSELY: Solon Ord. 432.09(a)(1) / ORC 4511.34(A)
-IMPROPER TURN: Solon Ord. 432.10 / ORC 4511.36
-LEFT OF CENTER: Solon Ord. 432.05(a) / ORC 4511.29(A)
 SCHOOL BUS: Solon Ord. 432.36 / ORC 4511.75
 STREET RACING: Solon Ord. 434.07(b) / ORC 4511.251(B)`;
 
-const SYSTEM = `You are the Solon PD Assistant — a comprehensive reference tool for officers, supervisors, and staff of the Solon Police Department. You provide accurate, practical, cited answers on:
+const SYSTEM = `You are the Solon PD Assistant — a comprehensive reference tool for officers, supervisors, and staff of the Solon Police Department.
 
-1. SOLON PD GENERAL ORDERS & POLICIES — All department SOPs pulled live from Google Drive. Cite as [G2311-63 Use of Force Policy]
-2. OHIO REVISED CODE — State statutes. Cite as [ORC 2935.03]
-3. SOLON CITY ORDINANCES — Full code at https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1. Cite as [Solon Ord. 434.01]
-4. COLLECTIVE BARGAINING AGREEMENT (CBA/CONTRACT) — OPBA contract January 2025-December 2027. Cite as [CBA Article 8 - Discipline]
-5. CONSTITUTIONAL & CASE LAW — Miranda v. Arizona, Graham v. Connor, Tennessee v. Garner, Terry v. Ohio, etc.
-6. LAW ENFORCEMENT PROCEDURES — Arrests, searches, traffic stops, OVI, domestic violence, juveniles, mental health crisis, NIBRS
+You have access to ALL documents in the department's Google Drive including subfolders (Policy, Maps, Cheat Sheets, SOPs, Forms, etc.) and the following baked-in reference content.
 
-RULES:
-- Prioritize content from Google Drive documents when provided — include clickable links
-- Always cite your source with specific article, section, or GO number
-- Be direct and practical — officers need quick usable answers
-- When Drive content is provided, ALWAYS include the document link as a clickable button
-- For ordinance questions always include: https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1
-- End responses with: **Source:** [citation] and 🔗 **View Document:** [URL]
-- If multiple documents are relevant, list ALL links
+When answering questions:
+1. Use Google Drive document content when provided — it is the most authoritative source
+2. ALWAYS include clickable document links for every relevant file found
+3. Cite General Orders as [G2311-63 Use of Force Policy]
+4. Cite Ohio law as [ORC 2935.03]
+5. Cite CBA as [CBA Article 8 - Discipline]
+6. Cite Solon ordinances as [Solon Ord. 434.01]
+7. Be direct and practical — officers need quick answers
+8. If Drive content is a scanned PDF (unreadable), say so and direct officer to the clickable link
+9. Always end with document links as clickable buttons
+10. For maps/zones/boundaries — provide the link to the map file directly
+
+FORMAT FOR DOCUMENT LINKS:
+Always format document links exactly like this so they render as clickable buttons:
+🔗 **View Document:** [URL]
+
+For multiple documents list each one:
+🔗 **View Full Policy:** [URL]
+🔗 **View Cheat Sheet:** [URL]
+🔗 **View Map:** [URL]
 
 ${BAKED_CONTENT}`;
 
@@ -268,14 +364,17 @@ app.post('/chat', async (req, res) => {
     for (const f of files) {
       const content = await readFile(f.id, f.mimeType);
       if (content && content.length > 100) {
-        context += `\n\n=== ${f.name} ===\nDrive Link: ${f.webViewLink}\n${content.slice(0, 5000)}`;
+        context += `\n\n=== ${f.name} ===\nLink: ${f.webViewLink}\n\n${content.slice(0, 6000)}`;
+        links.push(`📄 ${f.name}: ${f.webViewLink}`);
+      } else {
+        // Still include the link even if content is unreadable (scanned PDF)
+        links.push(`📄 ${f.name} (scanned PDF - view directly): ${f.webViewLink}`);
       }
-      links.push(`📄 ${f.name}: ${f.webViewLink}`);
     }
 
     const system = SYSTEM +
       (context ? `\n\n=== LIVE CONTENT FROM GOOGLE DRIVE ===\n${context}` : '') +
-      (links.length ? `\n\n=== RELEVANT DOCUMENT LINKS (always include these as clickable links in your response) ===\n${links.join('\n')}` : '');
+      (links.length ? `\n\n=== DOCUMENT LINKS — INCLUDE ALL OF THESE AS CLICKABLE BUTTONS IN YOUR RESPONSE ===\n${links.join('\n')}` : '');
 
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
