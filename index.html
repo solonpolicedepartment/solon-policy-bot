@@ -2,83 +2,106 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <title>Solon PD Assistant</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"/>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #eef0f4;
-      display: flex; align-items: center; justify-content: center;
-      min-height: 100vh; padding: 16px;
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      height: 100%;
+      overscroll-behavior: none;
     }
-    .shell {
-      display: flex; flex-direction: column;
-      width: 100%; max-width: 760px;
-      height: 92vh; max-height: 820px;
-      border-radius: 18px; overflow: hidden;
-      background: #ffffff;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.13);
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #eef0f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: 0;
     }
 
-    /* Header */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 760px;
+      height: 100dvh;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    @media (min-width: 640px) {
+      body { padding: 16px; }
+      .shell {
+        height: 92dvh;
+        max-height: 820px;
+        border-radius: 18px;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.13);
+      }
+    }
+
     .header {
-      display: flex; align-items: center; gap: 13px;
-      padding: 15px 20px;
+      display: flex; align-items: center; gap: 10px;
+      padding: max(12px, env(safe-area-inset-top)) 14px 12px;
       background: #0d2b55;
       flex-shrink: 0;
     }
     .header-logo {
-      width: 42px; height: 42px; border-radius: 10px;
+      width: 36px; height: 36px; border-radius: 9px;
       background: rgba(255,255,255,0.12);
       display: flex; align-items: center; justify-content: center;
-      color: #fff; font-size: 21px; flex-shrink: 0;
+      flex-shrink: 0;
     }
-    .header-info h1 { font-size: 15px; font-weight: 600; color: #fff; letter-spacing: 0.1px; }
-    .header-info p { font-size: 11.5px; color: rgba(255,255,255,0.55); margin-top: 2px; }
-    .header-status { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade80; }
-    .dot-label { font-size: 11px; color: rgba(255,255,255,0.55); }
+    .header-logo svg { width: 20px; height: 20px; }
+    .header-info { min-width: 0; flex: 1; }
+    .header-info h1 { font-size: 14px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-info p { font-size: 10.5px; color: rgba(255,255,255,0.55); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-status { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+    .dot-label { font-size: 10px; color: rgba(255,255,255,0.55); display: none; }
+    @media (min-width: 480px) { .dot-label { display: inline; } }
 
-    /* Quick topics */
     .topics {
-      display: flex; gap: 5px; padding: 10px 16px;
+      display: flex; gap: 5px; padding: 8px 10px;
       background: #f7f8fa;
       border-bottom: 1px solid #e8eaed;
       overflow-x: auto; flex-shrink: 0;
+      -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
     }
     .topics::-webkit-scrollbar { display: none; }
     .topic {
-      font-size: 11.5px; padding: 5px 12px; border-radius: 20px;
+      font-size: 11px; padding: 6px 11px; border-radius: 20px;
       border: 1px solid #d5d8de;
       background: #fff; color: #555;
       cursor: pointer; white-space: nowrap;
       transition: all 0.14s; font-family: inherit;
       flex-shrink: 0;
     }
-    .topic:hover { background: #0d2b55; color: #fff; border-color: #0d2b55; }
+    .topic:active { background: #0d2b55; color: #fff; border-color: #0d2b55; }
 
-    /* Messages */
     .messages {
-      flex: 1; overflow-y: auto; padding: 18px 16px;
-      display: flex; flex-direction: column; gap: 14px;
+      flex: 1; overflow-y: auto; padding: 14px 12px;
+      display: flex; flex-direction: column; gap: 12px;
       scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
     }
-    .msg { display: flex; gap: 10px; align-items: flex-start; max-width: 94%; }
+    .msg { display: flex; gap: 8px; align-items: flex-start; max-width: 96%; }
     .msg.user { flex-direction: row-reverse; align-self: flex-end; }
     .msg.bot { align-self: flex-start; }
     .av {
-      width: 32px; height: 32px; border-radius: 50%;
+      width: 28px; height: 28px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 15px; flex-shrink: 0; margin-top: 1px;
+      flex-shrink: 0; margin-top: 1px;
     }
+    .av svg { width: 15px; height: 15px; }
     .av.b { background: #0d2b55; color: #fff; }
     .av.u { background: #dbeafe; color: #1d4ed8; }
     .bubble {
-      padding: 11px 15px; border-radius: 16px;
-      font-size: 13.5px; line-height: 1.7; color: #1a1a2e;
+      padding: 10px 13px; border-radius: 15px;
+      font-size: 14px; line-height: 1.6; color: #1a1a2e;
+      word-wrap: break-word; overflow-wrap: break-word;
+      max-width: 100%;
     }
     .msg.bot .bubble {
       background: #f4f5f8; border: 1px solid #e8eaed;
@@ -89,46 +112,44 @@
       border-bottom-right-radius: 4px;
     }
 
-    /* Inline badges */
     .badge-go {
       display: inline-block; background: #dbeafe; color: #1e40af;
       font-size: 11px; font-weight: 600; padding: 2px 7px;
-      border-radius: 4px; margin: 0 2px; border: 1px solid #bfdbfe;
+      border-radius: 4px; margin: 1px 2px; border: 1px solid #bfdbfe;
     }
     .badge-orc {
       display: inline-block; background: #dcfce7; color: #166534;
       font-size: 11px; font-weight: 600; padding: 2px 7px;
-      border-radius: 4px; margin: 0 2px; border: 1px solid #bbf7d0;
+      border-radius: 4px; margin: 1px 2px; border: 1px solid #bbf7d0;
     }
     .badge-ord {
       display: inline-block; background: #fef9c3; color: #854d0e;
       font-size: 11px; font-weight: 600; padding: 2px 7px;
-      border-radius: 4px; margin: 0 2px; border: 1px solid #fde68a;
+      border-radius: 4px; margin: 1px 2px; border: 1px solid #fde68a;
     }
 
-    /* PDF / doc link button */
     .doc-btn {
       display: inline-flex; align-items: center; gap: 6px;
-      margin-top: 10px; padding: 8px 15px;
+      margin: 8px 6px 0 0; padding: 9px 14px;
       background: #0d2b55; color: #fff !important;
-      border-radius: 8px; text-decoration: none !important;
-      font-size: 13px; font-weight: 600; transition: background 0.14s;
+      border-radius: 10px; text-decoration: none !important;
+      font-size: 13px; font-weight: 600;
+      -webkit-tap-highlight-color: transparent;
     }
-    .doc-btn:hover { background: #07193a; }
+    .doc-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .doc-btn:active { background: #07193a; }
 
-    /* Source block */
     .src {
-      margin-top: 10px; padding: 8px 12px;
+      margin-top: 8px; padding: 8px 11px;
       background: #f0f4ff; border-left: 3px solid #0d2b55;
       border-radius: 0 6px 6px 0; font-size: 12px; color: #374151;
     }
     .bubble hr { border: none; border-top: 1px solid #e5e7eb; margin: 10px 0; }
 
-    /* Typing */
     .typing {
       display: flex; gap: 5px; padding: 12px 14px;
       background: #f4f5f8; border: 1px solid #e8eaed;
-      border-radius: 16px; border-bottom-left-radius: 4px; width: fit-content;
+      border-radius: 15px; border-bottom-left-radius: 4px; width: fit-content;
     }
     .typing span {
       width: 6px; height: 6px; background: #aaa; border-radius: 50%;
@@ -138,46 +159,48 @@
     .typing span:nth-child(3) { animation-delay: .4s; }
     @keyframes bop { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
 
-    /* Suggestions */
     .suggestions {
       display: flex; flex-wrap: wrap; gap: 6px;
-      padding: 8px 16px 10px; flex-shrink: 0;
+      padding: 0 12px 10px; flex-shrink: 0;
     }
     .sug {
-      font-size: 12px; padding: 5px 12px; border-radius: 20px;
+      font-size: 12px; padding: 6px 12px; border-radius: 20px;
       border: 1px solid #d5d8de; background: #fff; color: #555;
-      cursor: pointer; transition: all 0.14s; font-family: inherit;
+      cursor: pointer; font-family: inherit;
     }
-    .sug:hover { background: #0d2b55; color: #fff; border-color: #0d2b55; }
+    .sug:active { background: #0d2b55; color: #fff; border-color: #0d2b55; }
 
-    /* Input */
     .input-row {
-      display: flex; gap: 9px; padding: 12px 14px;
+      display: flex; gap: 8px;
+      padding: 10px 10px max(10px, env(safe-area-inset-bottom));
       border-top: 1px solid #e8eaed; background: #fff;
       flex-shrink: 0; align-items: flex-end;
     }
     textarea {
       flex: 1; resize: none; border: 1.5px solid #d5d8de;
-      border-radius: 10px; padding: 9px 13px;
-      font-size: 13.5px; font-family: inherit; color: #1a1a2e;
-      background: #fff; line-height: 1.5;
-      min-height: 40px; max-height: 120px;
+      border-radius: 12px; padding: 10px 13px;
+      font-size: 16px; font-family: inherit; color: #1a1a2e;
+      background: #fff; line-height: 1.4;
+      min-height: 42px; max-height: 110px;
       outline: none; transition: border-color 0.15s;
     }
     textarea:focus { border-color: #0d2b55; }
-    textarea::placeholder { color: #aaa; }
+    textarea::placeholder { color: #aaa; font-size: 14px; }
     .send {
-      width: 40px; height: 40px; border-radius: 10px;
+      width: 42px; height: 42px; border-radius: 12px;
       background: #0d2b55; border: none; color: #fff;
-      font-size: 17px; cursor: pointer;
+      cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      transition: background 0.14s; flex-shrink: 0;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
     }
-    .send:hover { background: #07193a; }
+    .send svg { width: 19px; height: 19px; }
+    .send:active { background: #07193a; }
     .send:disabled { background: #e5e7eb; color: #aaa; cursor: not-allowed; }
     .disclaimer {
-      font-size: 11px; color: #bbb; text-align: center;
-      padding: 5px 16px 10px; flex-shrink: 0;
+      font-size: 10px; color: #bbb; text-align: center;
+      padding: 4px 12px max(4px, env(safe-area-inset-bottom));
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -185,7 +208,9 @@
 <div class="shell">
 
   <div class="header">
-    <div class="header-logo"><i class="ti ti-shield-check"></i></div>
+    <div class="header-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+    </div>
     <div class="header-info">
       <h1>Solon PD Assistant</h1>
       <p>Policies · Ohio Law · Ordinances · Procedures</p>
@@ -199,28 +224,28 @@
   <div class="topics">
     <button class="topic" onclick="ask('General Orders and department policy')">📋 Policy</button>
     <button class="topic" onclick="ask('Ohio Revised Code statutes')">⚖️ ORC</button>
-    <button class="topic" onclick="ask('Solon city ordinances — reference https://codelibrary.amlegal.com/codes/solon/latest/solon_oh/0-0-0-1')">🏛️ Ordinances</button>
+    <button class="topic" onclick="ask('Solon city ordinances')">🏛️ Ordinances</button>
     <button class="topic" onclick="ask('traffic law and traffic stops')">🚗 Traffic</button>
     <button class="topic" onclick="ask('use of force policy and procedures')">👮 Use of Force</button>
-    <button class="topic" onclick="ask('search and seizure law and warrant requirements')">🔍 Search & Seizure</button>
-    <button class="topic" onclick="ask('report writing and NIBRS documentation')">📝 Reports</button>
-    <button class="topic" onclick="ask('evidence handling and chain of custody')">🔒 Evidence</button>
-    <button class="topic" onclick="ask('criminal law and case law')">📚 Criminal Law</button>
-    <button class="topic" onclick="ask('domestic violence procedures and protection orders')">🏠 Domestic</button>
-    <button class="topic" onclick="ask('mental health crisis response procedures')">🧠 Mental Health</button>
-    <button class="topic" onclick="ask('juvenile procedures and laws')">👦 Juvenile</button>
+    <button class="topic" onclick="ask('search and seizure law')">🔍 Search</button>
+    <button class="topic" onclick="ask('report writing and NIBRS')">📝 Reports</button>
+    <button class="topic" onclick="ask('evidence handling')">🔒 Evidence</button>
+    <button class="topic" onclick="ask('the collective bargaining agreement contract')">📄 CBA</button>
+    <button class="topic" onclick="ask('domestic violence procedures')">🏠 Domestic</button>
+    <button class="topic" onclick="ask('police zone maps')">🗺️ Maps</button>
+    <button class="topic" onclick="ask('criminal charges and charging forms')">⚖️ Charges</button>
   </div>
 
   <div class="messages" id="msgs">
     <div class="msg bot">
-      <div class="av b"><i class="ti ti-shield"></i></div>
+      <div class="av b"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
       <div class="bubble">
         Hello! I'm the <strong>Solon PD Assistant</strong>. Ask me anything about:<br><br>
         <strong>📋 General Orders</strong> — Department policy with GO citations<br>
         <strong>⚖️ Ohio Revised Code</strong> — State statutes and criminal law<br>
         <strong>🏛️ Solon Ordinances</strong> — Local municipal codes<br>
-        <strong>👮 Procedures</strong> — Traffic, arrests, evidence, reports<br>
-        <strong>📚 Case Law</strong> — Miranda, Graham v. Connor, and more<br><br>
+        <strong>📄 CBA/Contract</strong> — Union contract terms<br>
+        <strong>🗺️ Maps</strong> — Zone maps and boundaries<br><br>
         What do you need?
       </div>
     </div>
@@ -230,22 +255,20 @@
     <button class="sug" onclick="useSug(this)">Vehicle pursuit policy</button>
     <button class="sug" onclick="useSug(this)">OVI stop procedure</button>
     <button class="sug" onclick="useSug(this)">Use of force rules</button>
-    <button class="sug" onclick="useSug(this)">Body camera policy</button>
+    <button class="sug" onclick="useSug(this)">Overtime pay rate</button>
     <button class="sug" onclick="useSug(this)">Miranda rights</button>
     <button class="sug" onclick="useSug(this)">Evidence handling</button>
-    <button class="sug" onclick="useSug(this)">Search warrant requirements</button>
-    <button class="sug" onclick="useSug(this)">Domestic violence response</button>
   </div>
 
   <div class="input-row">
     <textarea id="inp" rows="1"
-      placeholder="Ask about policy, Ohio law, ordinances, procedures…"
+      placeholder="Ask about policy, law, ordinances…"
       onkeydown="handleKey(event)" oninput="resize(this)"></textarea>
-    <button class="send" id="sendBtn" onclick="send()">
-      <i class="ti ti-send"></i>
+    <button class="send" id="sendBtn" onclick="send()" aria-label="Send message">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
   </div>
-  <div class="disclaimer">AI-generated. Verify critical information against official sources before acting.</div>
+  <div class="disclaimer">AI-generated. Verify critical information before acting.</div>
 </div>
 
 <script>
@@ -254,7 +277,7 @@
 
   function resize(el) {
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 110) + 'px';
   }
   function handleKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -270,13 +293,17 @@
     send();
   }
 
+  const botSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+  const userSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  const linkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+
   function addMsg(role, html) {
     const c = document.getElementById('msgs');
     const w = document.createElement('div');
     w.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
     const av = document.createElement('div');
     av.className = 'av ' + (role === 'user' ? 'u' : 'b');
-    av.innerHTML = role === 'user' ? '<i class="ti ti-user"></i>' : '<i class="ti ti-shield"></i>';
+    av.innerHTML = role === 'user' ? userSvg : botSvg;
     const b = document.createElement('div');
     b.className = 'bubble';
     b.innerHTML = html;
@@ -291,7 +318,7 @@
     w.className = 'msg bot'; w.id = 'typing';
     const av = document.createElement('div');
     av.className = 'av b';
-    av.innerHTML = '<i class="ti ti-shield"></i>';
+    av.innerHTML = botSvg;
     const t = document.createElement('div');
     t.className = 'typing';
     t.innerHTML = '<span></span><span></span><span></span>';
@@ -306,24 +333,20 @@
 
   function fmt(text) {
     return text
-      // General Order citations — blue
       .replace(/\[([A-Z]\d{4}[-–]\d{2,3}[^\]]*)\]/g, '<span class="badge-go">$1</span>')
-      // ORC citations — green
       .replace(/\[ORC\s+(\d[\d.]+[^\]]*)\]/gi, '<span class="badge-orc">ORC $1</span>')
       .replace(/\[Ohio\s+Rev(?:ised)?\s+Code\s+(\d[\d.]+[^\]]*)\]/gi, '<span class="badge-orc">ORC $1</span>')
-      // Solon Ordinance citations — yellow
-      .replace(/\[Solon\s+Ord(?:inance)?\s+([^\]]+)\]/gi, '<span class="badge-ord">Solon Ord. $1</span>')
-      // Bold
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      // HR
+      .replace(/\[Solon\s+Ord(?:inance)?\.?\s+([^\]]+)\]/gi, '<span class="badge-ord">Solon Ord. $1</span>')
+      .replace(/\[CBA\s+Article\s+([^\]]+)\]/gi, '<span class="badge-go">CBA Art. $1</span>')
       .replace(/^---$/gm, '<hr>')
-      // Source block
+      .replace(/(?:🔗\s*\*\*View[^:]*:\*\*\s*)?(https?:\/\/(?:drive\.google\.com|codelibrary\.amlegal\.com)\/[^\s<\n"]+)/g, function(match, url) {
+        let clean = url, trail = '';
+        while (/[.,;:!?)]$/.test(clean)) { trail = clean.slice(-1) + trail; clean = clean.slice(0, -1); }
+        const label = clean.includes('codelibrary.amlegal.com') ? 'View Ordinances' : 'View Document';
+        return '<a href="' + clean + '" target="_blank" rel="noopener" class="doc-btn">' + linkSvg + ' ' + label + '</a>' + trail;
+      })
       .replace(/\*\*Source:\*\*\s*(.+)/g, '<div class="src"><strong>Source:</strong> $1</div>')
-      // Doc link buttons
-      .replace(/🔗 \*\*View[^:]*:\*\*\s*(https?:\/\/[^\s<\n]+)/g, '<a href="$1" target="_blank" rel="noopener" class="doc-btn"><i class="ti ti-file-text"></i> View Document</a>')
-      .replace(/(https?:\/\/drive\.google\.com\/[^\s<\n"]+)/g, '<a href="$1" target="_blank" rel="noopener" class="doc-btn"><i class="ti ti-file-text"></i> View Document</a>')
-      .replace(/(https?:\/\/codelibrary\.amlegal\.com\/[^\s<\n"]+)/g, '<a href="$1" target="_blank" rel="noopener" class="doc-btn"><i class="ti ti-external-link"></i> View Solon Ordinances</a>')
-      // Breaks
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\n\n/g, '<br><br>')
       .replace(/\n/g, '<br>');
   }
